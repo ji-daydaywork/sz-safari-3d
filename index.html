@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>深圳野生動物園 · 3D 互動導覽</title>
+<meta name="description" content="深圳野生動物園 3D 互動地圖：猛獸谷、食草動物區、熊貓莊園、海洋天地、表演時間、港人票價與兩日一夜行程。" />
+<style>
+  :root{
+    --ink:#0f172a; --paper:#f7f4ec; --gold:#e0a94a; --green:#2f6b4f;
+    --orange:#c2410c; --sky:#7cc4e8; --card:rgba(255,255,255,.92);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,-apple-system,sans-serif;
+    color:var(--ink); background:#0b1220; overflow:hidden;
+  }
+  #scene{
+    position:fixed; inset:0;
+    background:
+      radial-gradient(120% 80% at 50% 0%, #bfe6f6 0%, #dff1e6 38%, #f3efe0 68%, #e8dcc2 100%);
+    transition:background .8s ease;
+  }
+  body.night #scene{
+    background:radial-gradient(120% 80% at 50% 0%, #0b1b33 0%, #122a45 45%, #1b2e3f 75%, #101a26 100%);
+  }
+  canvas{display:block}
+
+  /* ---------- top bar ---------- */
+  header{
+    position:fixed; top:0; left:0; right:0; z-index:20;
+    display:flex; align-items:center; gap:14px;
+    padding:14px 20px; pointer-events:none;
+  }
+  .brand{display:flex; align-items:center; gap:10px; pointer-events:auto}
+  .mark{
+    width:38px;height:38px;border-radius:12px;
+    background:linear-gradient(145deg,#2f6b4f,#173f2d);
+    display:grid;place-items:center;color:#f6e7c8;font-size:20px;
+    box-shadow:0 6px 18px rgba(15,23,42,.25);
+  }
+  .brand h1{font-size:16px;margin:0;letter-spacing:.06em;font-weight:800}
+  .brand p{margin:2px 0 0;font-size:10.5px;letter-spacing:.18em;opacity:.62;text-transform:uppercase}
+  .spacer{flex:1}
+  .chip{
+    pointer-events:auto; background:rgba(255,255,255,.86); backdrop-filter:blur(10px);
+    border:1px solid rgba(15,23,42,.08); border-radius:999px;
+    padding:8px 14px; font-size:12.5px; font-weight:600; color:#243b53;
+    box-shadow:0 4px 14px rgba(15,23,42,.08); white-space:nowrap;
+  }
+  .toggle{cursor:pointer;user-select:none}
+  .toggle:active{transform:scale(.97)}
+
+  /* ---------- side panel ---------- */
+  #panel{
+    position:fixed; z-index:30; top:78px; left:20px; width:310px; max-height:calc(100vh - 120px);
+    display:flex; flex-direction:column; gap:12px; overflow:auto; padding-bottom:6px;
+    scrollbar-width:thin;
+  }
+  .card{
+    background:var(--card); backdrop-filter:blur(14px);
+    border:1px solid rgba(15,23,42,.08); border-radius:18px;
+    padding:16px 16px 14px; box-shadow:0 10px 30px rgba(15,23,42,.12);
+  }
+  .kicker{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:#8a6d3b;font-weight:800;margin:0 0 8px}
+  .card h2{font-size:17px;margin:0 0 6px;line-height:1.35}
+  .card p{font-size:12.8px;line-height:1.7;margin:0;color:#334155}
+  .facts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+  .fact{background:#f4f0e4;border-radius:12px;padding:8px 10px}
+  .fact b{display:block;font-size:14.5px;color:#1f3d2e}
+  .fact span{font-size:10.5px;color:#6b7a72;letter-spacing:.04em}
+
+  .zoneList{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
+  .zoneBtn{
+    border:1px solid rgba(15,23,42,.12); background:#fff; color:#1f2937;
+    border-radius:999px; padding:7px 11px; font-size:12px; font-weight:600; cursor:pointer;
+    display:flex;align-items:center;gap:6px;
+  }
+  .zoneBtn i{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .zoneBtn:hover{border-color:#2f6b4f;color:#2f6b4f}
+  .zoneBtn.on{background:#173f2d;color:#f6e7c8;border-color:#173f2d}
+
+  /* ---------- info drawer ---------- */
+  #info{
+    position:fixed; z-index:35; right:20px; top:78px; width:340px; max-height:calc(100vh - 120px);
+    overflow:auto; transform:translateX(calc(100% + 40px)); transition:transform .35s cubic-bezier(.2,.8,.2,1);
+  }
+  #info.open{transform:translateX(0)}
+  #info .close{
+    position:absolute; top:12px; right:14px; width:28px;height:28px;border-radius:50%;
+    border:none;background:#eef2f0;color:#334155;font-size:16px;cursor:pointer;line-height:1;
+  }
+  #info h3{font-size:19px;margin:0 0 4px}
+  #info .sub{font-size:11.5px;color:#6b7a72;letter-spacing:.08em;margin-bottom:10px}
+  #info ul{margin:10px 0 0;padding-left:18px}
+  #info li{font-size:12.8px;line-height:1.75;margin-bottom:6px;color:#334155}
+  .price{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .price span{background:#fff4dd;border:1px solid #f0d9a8;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:700;color:#8a5a12}
+
+  /* ---------- bottom bar ---------- */
+  #dock{
+    position:fixed; z-index:25; left:50%; bottom:18px; transform:translateX(-50%);
+    display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center;
+    background:rgba(12,24,20,.78); backdrop-filter:blur(12px);
+    border-radius:999px; padding:8px 12px; max-width:calc(100vw - 32px);
+  }
+  #dock button{
+    background:transparent;border:none;color:#e9e4d6;font-size:12.5px;font-weight:600;
+    padding:7px 12px;border-radius:999px;cursor:pointer;white-space:nowrap;
+  }
+  #dock button:hover{background:rgba(255,255,255,.12)}
+  #dock button.on{background:#e0a94a;color:#1b1408}
+  #dock .sep{width:1px;height:18px;background:rgba(255,255,255,.22)}
+
+  /* ---------- intro ---------- */
+  #intro{
+    position:fixed; inset:0; z-index:60; display:grid; place-items:center;
+    background:radial-gradient(80% 60% at 50% 40%, rgba(8,18,14,.35), rgba(8,18,14,.72));
+    backdrop-filter:blur(3px); transition:opacity .6s ease;
+  }
+  #intro.hide{opacity:0;pointer-events:none}
+  .introCard{
+    width:min(560px,calc(100vw - 40px)); background:rgba(250,247,238,.97);
+    border-radius:24px; padding:30px 28px; box-shadow:0 30px 80px rgba(0,0,0,.35);
+    text-align:center;
+  }
+  .introCard .eyebrow{font-size:11px;letter-spacing:.32em;color:#8a6d3b;font-weight:800}
+  .introCard h2{font-size:clamp(24px,4.2vw,34px);margin:12px 0 6px;letter-spacing:.02em}
+  .introCard p{font-size:13.5px;line-height:1.8;color:#3f4f47;margin:0 auto;max-width:420px}
+  .introCard .go{
+    margin-top:22px;border:none;border-radius:999px;padding:13px 34px;cursor:pointer;
+    background:linear-gradient(135deg,#2f6b4f,#173f2d);color:#f7efd8;font-size:14px;font-weight:800;letter-spacing:.12em;
+    box-shadow:0 10px 24px rgba(23,63,45,.35);
+  }
+  .introCard .go:active{transform:translateY(1px)}
+  .hint{font-size:11px;color:#7a8a80;margin-top:12px}
+
+  #loading{
+    position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:#0b1220;color:#e9e4d6;
+    font-size:13px;letter-spacing:.2em;transition:opacity .4s ease;
+  }
+  #loading.gone{opacity:0;pointer-events:none}
+
+  /* mobile */
+  @media (max-width:860px){
+    header{padding:10px 12px}
+    .brand p{display:none}
+    #panel{
+      top:auto; bottom:74px; left:8px; right:8px; width:auto; max-height:44vh;
+      flex-direction:row; overflow-x:auto; overflow-y:hidden; gap:8px; padding-bottom:2px;
+    }
+    #panel .card{min-width:270px;padding:13px 14px}
+    #panel .card.slim{display:none}
+    #info{left:8px;right:8px;width:auto;top:auto;bottom:74px;max-height:60vh;transform:translateY(calc(100% + 90px))}
+    #info.open{transform:translateY(0)}
+    #dock{bottom:10px;padding:6px 8px;gap:4px}
+    #dock button{font-size:11.5px;padding:6px 9px}
+    .facts{grid-template-columns:1fr 1fr}
+  }
+  @media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+
+<header>
+  <div class="brand">
+    <div class="mark">🦁</div>
+    <div>
+      <h1>深圳野生動物園</h1>
+      <p>3D Interactive Guide · Shenzhen Safari Park</p>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="chip toggle" id="nightBtn">🌙 夜景</div>
+  <div class="chip toggle" id="rotateBtn">⟳ 自動環繞</div>
+</header>
+
+<aside id="panel">
+  <div class="card" id="introCardSmall">
+    <p class="kicker">西麗湖 · 國家 4A 景區</p>
+    <h2>一座可以走進去的動物王國</h2>
+    <p>300 多種、近萬隻動物放養於 64 萬平方米園區。拖動畫面環繞，點擊各區平台查看攻略。</p>
+    <div class="facts">
+      <div class="fact"><b>09:30–18:00</b><span>17:00 停止入園</span></div>
+      <div class="fact"><b>HK$99</b><span>港澳居民網購價</span></div>
+      <div class="fact"><b>7 號線</b><span>西麗湖站 B 出口</span></div>
+      <div class="fact"><b>1.2 米以下</b><span>免費（每成人限帶一名）</span></div>
+    </div>
+  </div>
+
+  <div class="card slim">
+    <p class="kicker">園區導覽</p>
+    <div class="zoneList" id="zoneList"></div>
+  </div>
+</aside>
+
+<aside id="info">
+  <div class="card">
+    <button class="close" id="infoClose">×</button>
+    <p class="kicker" id="infoKicker">ZONE</p>
+    <h3 id="infoTitle"></h3>
+    <div class="sub" id="infoSub"></div>
+    <p id="infoDesc"></p>
+    <ul id="infoTips"></ul>
+    <div class="price" id="infoPrice"></div>
+  </div>
+</aside>
+
+<div id="dock">
+  <button data-view="overview" class="on">全景</button>
+  <button data-view="beast">猛獸谷</button>
+  <button data-view="herb">食草區</button>
+  <button data-view="panda">熊貓</button>
+  <button data-view="ocean">海洋</button>
+  <button data-view="show">表演區</button>
+  <span class="sep"></span>
+  <button id="tourBtn">▶ 一日路線</button>
+</div>
+
+<div id="intro">
+  <div class="introCard">
+    <div class="eyebrow">SHENZHEN SAFARI PARK · 3D</div>
+    <h2>深圳野生動物園</h2>
+    <p>低多邊形 3D 園區地圖：猛獸谷餵老虎、長頸鹿、熊貓莊園、海洋天地與表演時間，一次看清。附港人票價與兩日一夜行程建議。</p>
+    <button class="go" id="enterBtn">進入園區</button>
+    <div class="hint">拖動旋轉 · 雙指縮放 · 點擊棕色平台查看攻略</div>
+  </div>
+</div>
+
+<div id="loading">載入園區中…</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+/* ============================== DATA ============================== */
+const ZONES = [
+  {
+    id:'entrance', name:'入口廣場', en:'ENTRANCE', color:'#8ecae6', pos:[0,0,58], r:9,
+    sub:'地鐵西麗湖站 B 出口 · 步行 1 分鐘',
+    desc:'正門、售票與行李寄存都在這裏。入園後先取地圖，右手邊可租嬰兒車及輪椅。',
+    tips:['寄存 ¥10–20／日，視行李大小','建議 09:30 開園即入，避開人潮','網購票直接掃碼入園，現場買貴一倍'],
+    price:['門票 HK$99 起','寄存 ¥10–20']
+  },
+  {
+    id:'beast', name:'猛獸谷', en:'PREDATOR VALLEY', color:'#c2410c', pos:[-42,0,-8], r:11,
+    sub:'東北虎 · 華南虎 · 獅子 · 黑熊',
+    desc:'800 米高空棧道貫穿全區，老虎在腳下走過。招牌體驗是乘鐵籠車入猛獸區餵老虎。',
+    tips:['入園第一件事：先排餵老虎車（¥50／人）','排隊 45–60 分鐘屬正常，11:00 開始','每人一塊肉，切勿伸手摸老虎','調虎離山表演：11:00 / 13:00 / 14:00'],
+    price:['餵老虎 ¥50','大貓大道 免費']
+  },
+  {
+    id:'herb', name:'食草動物區', en:'HERBIVORE PLAINS', color:'#65a30d', pos:[38,0,12], r:12,
+    sub:'長頸鹿 · 斑馬 · 大象 · 羊駝',
+    desc:'全園最大區域，動物自由放養。可以親手餵長頸鹿、大象與羊駝，是最受小朋友歡迎的一區。',
+    tips:['餵長頸鹿 ¥20／份，葉子鋒利要小心','大象飼料包其實是蘿蔔與木瓜','下午四時後光線最適合拍照'],
+    price:['餵食 ¥20／份','騎馬 ¥60']
+  },
+  {
+    id:'panda', name:'熊貓莊園', en:'PANDA HOUSE', color:'#334155', pos:[-12,0,-42], r:8,
+    sub:'大熊貓 · 小熊貓',
+    desc:'國寶展館，室內有冷氣。熊貓上午最活躍，下午多數躲進室內休息。',
+    tips:['10:30 前去看熊貓最精神','館內冷氣強，帶件薄外套','旁邊有水母王國，可順路一看'],
+    price:['免費（含門票）']
+  },
+  {
+    id:'ocean', name:'海洋天地', en:'OCEAN WORLD', color:'#0ea5e9', pos:[42,0,-38], r:9,
+    sub:'海豚 · 海獅 · 美人魚表演',
+    desc:'海豚與海獅表演場，週六日 14:00 有美人魚與鯊魚共舞。注意鯊魚池魚缸偏細。',
+    tips:['歡樂的海洋 15:00 一場','海豚合照 ¥50','KOL 實測：鯊魚館較細，不必專程'],
+    price:['表演 免費','合照 ¥50']
+  },
+  {
+    id:'show', name:'表演區', en:'SHOW GROUND', color:'#e11d48', pos:[0,0,-4], r:8,
+    sub:'百獸盛會 · 馬戲小鎮 · 鸚鵡劇場',
+    desc:'全園最集中的表演場地。百獸盛會 16:30 開場，16:15 入場霸位，是全園最值得看的節目。',
+    tips:['百獸盛會 16:30（週末另加 14:00）','提前 15–20 分鐘入場','馬戲小鎮平日免費，週末 ¥10'],
+    price:['表演 免費']
+  }
+];
+
+/* ============================== SCENE ============================== */
+const container = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(innerWidth, innerHeight);
+labelRenderer.domElement.style.position = 'fixed';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.left = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+document.body.appendChild(labelRenderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xdfe9dd, 150, 340);
+
+const camera = new THREE.PerspectiveCamera(46, innerWidth/innerHeight, 0.5, 800);
+camera.position.set(0, 78, 118);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, 4);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 34;
+controls.maxDistance = 210;
+controls.maxPolarAngle = Math.PI * 0.46;
+controls.autoRotate = false;
+controls.autoRotateSpeed = 0.35;
+
+/* lights */
+const hemi = new THREE.HemisphereLight(0xdff2ff, 0x6b8a5a, 1.05);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff2d5, 2.1);
+sun.position.set(70, 110, 60);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -140; sun.shadow.camera.right = 140;
+sun.shadow.camera.top = 140; sun.shadow.camera.bottom = -140;
+sun.shadow.camera.far = 400;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xbcd8ff, 0.35);
+fill.position.set(-80, 50, -60);
+scene.add(fill);
+
+/* material helpers */
+const M = (color, opts={}) => new THREE.MeshStandardMaterial({ color, roughness:0.85, metalness:0.02, ...opts });
+
+/* ---------- ground ---------- */
+const groundGeo = new THREE.CircleGeometry(120, 96);
+const ground = new THREE.Mesh(groundGeo, M(0x8fbf6a, {roughness:1}));
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* darker outer ring */
+const outer = new THREE.Mesh(new THREE.RingGeometry(118, 190, 96), M(0x6f9b57, {roughness:1}));
+outer.rotation.x = -Math.PI/2;
+outer.position.y = -0.05;
+scene.add(outer);
+
+/* lake */
+const lake = new THREE.Mesh(new THREE.CircleGeometry(26, 64), new THREE.MeshStandardMaterial({color:0x4fa3c7, roughness:0.15, metalness:0.35, transparent:true, opacity:0.92}));
+lake.rotation.x = -Math.PI/2;
+lake.position.set(2, 0.06, -18);
+scene.add(lake);
+const lakeRim = new THREE.Mesh(new THREE.RingGeometry(26, 28, 64), M(0xd8cba6));
+lakeRim.rotation.x = -Math.PI/2;
+lakeRim.position.set(2, 0.04, -18);
+scene.add(lakeRim);
+
+/* paths */
+function path(points, width=3.2, color=0xe6d9b8){
+  const curve = new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));
+  const geo = new THREE.TubeGeometry(curve, 120, width, 6, false);
+  const mesh = new THREE.Mesh(geo, M(color, {roughness:1}));
+  mesh.scale.y = 0.06;
+  mesh.position.y = 0.09;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return curve;
+}
+const mainLoop = path([
+  [0,0,52],[26,0,40],[42,0,16],[44,0,-16],[36,0,-38],[10,0,-50],[-16,0,-46],[-38,0,-28],[-46,0,-4],[-36,0,24],[-14,0,44],[0,0,52]
+], 3.4);
+path([[0,0,52],[0,0,20],[1,0,-6],[0,0,-30],[0,0,-46]], 2.6);
+path([[-42,0,-8],[-22,0,2],[0,0,4]], 2.2);
+path([[38,0,12],[18,0,8],[2,0,6]], 2.2);
+path([[42,0,-38],[20,0,-32],[2,0,-22]], 2.2);
+
+/* ---------- trees (instanced) ---------- */
+(function trees(){
+  const trunkGeo = new THREE.CylinderGeometry(0.5,0.7,3,6);
+  const leafGeo = new THREE.ConeGeometry(3.2, 7, 7);
+  const N = 170;
+  const trunks = new THREE.InstancedMesh(trunkGeo, M(0x7a5a3a), N);
+  const leaves = new THREE.InstancedMesh(leafGeo, M(0x2f7d4f), N);
+  const d = new THREE.Object3D();
+  let i=0, guard=0;
+  const zonePts = ZONES.map(z=>new THREE.Vector2(z.pos[0], z.pos[2]));
+  while(i<N && guard<4000){
+    guard++;
+    const a = Math.random()*Math.PI*2, r = 26 + Math.random()*88;
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    if (Math.hypot(x-2, z+18) < 30) continue;           // keep lake clear
+    if (zonePts.some(p=>p.distanceTo(new THREE.Vector2(x,z)) < 13)) continue;
+    if (Math.abs(x) < 6 && z > -52 && z < 60) continue;  // central path
+    const s = 0.75 + Math.random()*0.9;
+    d.position.set(x, 1.5*s, z); d.scale.set(s,s,s); d.rotation.y = Math.random()*Math.PI;
+    d.updateMatrix(); trunks.setMatrixAt(i, d.matrix);
+    d.position.y = 6.2*s;
+    d.updateMatrix(); leaves.setMatrixAt(i, d.matrix);
+    i++;
+  }
+  trunks.count = leaves.count = i;
+  trunks.castShadow = leaves.castShadow = true;
+  scene.add(trunks, leaves);
+})();
+
+/* ---------- rocks ---------- */
+(function rocks(){
+  const g = new THREE.DodecahedronGeometry(1.6, 0);
+  const mesh = new THREE.InstancedMesh(g, M(0x9aa39b, {roughness:1}), 60);
+  const d = new THREE.Object3D();
+  for(let i=0;i<60;i++){
+    const a = Math.random()*Math.PI*2, r = 30 + Math.random()*80;
+    d.position.set(Math.cos(a)*r, 0.6, Math.sin(a)*r);
+    d.scale.setScalar(0.6 + Math.random()*1.4);
+    d.rotation.set(Math.random(), Math.random(), Math.random());
+    d.updateMatrix(); mesh.setMatrixAt(i, d.matrix);
+  }
+  mesh.castShadow = true; scene.add(mesh);
+})();
+
+/* ---------- zone platforms + labels ---------- */
+const pickables = [];
+const labels = {};
+
+ZONES.forEach(z=>{
+  const [x, , zz] = z.pos;
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(z.r, z.r+0.8, 1.1, 40), M(0xd9c9a3, {roughness:1}));
+  base.position.set(x, 0.55, zz);
+  base.receiveShadow = true;
+  base.userData.zone = z.id;
+  scene.add(base);
+  pickables.push(base);
+
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(z.r*0.92, 0.28, 10, 48), new THREE.MeshStandardMaterial({color:new THREE.Color(z.color), emissive:new THREE.Color(z.color), emissiveIntensity:0.25, roughness:0.6}));
+  ring.rotation.x = Math.PI/2;
+  ring.position.set(x, 1.15, zz);
+  scene.add(ring);
+
+  const el = document.createElement('div');
+  el.textContent = z.name;
+  el.style.cssText = `font-size:12.5px;font-weight:800;letter-spacing:.06em;color:#20301f;background:rgba(255,252,244,.92);border:1px solid rgba(32,48,31,.14);padding:5px 11px;border-radius:999px;box-shadow:0 4px 14px rgba(20,40,25,.16);white-space:nowrap;transform:translateY(-6px)`;
+  const lab = new CSS2DObject(el);
+  lab.position.set(x, 12, zz);
+  lab.center.set(0.5, 1);
+  scene.add(lab);
+  labels[z.id] = { el, lab };
+});
+
+/* ============================== ANIMALS ============================== */
+const animals = [];
+
+function addGroup(parts, pos, rot=0, scale=1){
+  const g = new THREE.Group();
+  parts.forEach(p=>{ p.castShadow = true; p.receiveShadow = false; g.add(p); });
+  g.position.set(...pos); g.rotation.y = rot; g.scale.setScalar(scale);
+  scene.add(g);
+  return g;
+}
+function box(w,h,d,color,x=0,y=0,z=0){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), M(color)); m.position.set(x,y,z); return m; }
+function cyl(rt,rb,h,color,x=0,y=0,z=0,seg=8){ const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), M(color)); m.position.set(x,y,z); return m; }
+function sph(r,color,x=0,y=0,z=0){ const m=new THREE.Mesh(new THREE.SphereGeometry(r,12,10), M(color)); m.position.set(x,y,z); return m; }
+
+/* giraffe */
+function giraffe(pos, rot){
+  const g = new THREE.Group();
+  const c = 0xd9a24b, s = 0x8a5a24;
+  g.add(box(4.2,2.2,1.8,c,0,5.4,0));
+  g.add(cyl(0.45,0.55,4.6,c,1.7,8.4,0).rotateZ(-0.22));
+  const head = box(1.9,1.0,0.9,c,3.2,10.7,0); head.rotation.z = 0.18; g.add(head);
+  g.add(cyl(0.12,0.12,1.4,0x3f3020,3.2,10.2,0.45).rotateZ(0.4));
+  [-1.4,1.4].forEach(x=>[-0.7,0.7].forEach(z=>g.add(cyl(0.22,0.26,5.4,c,x,2.7,z))));
+  for(let i=0;i<7;i++){ g.add(box(0.55,0.55,0.06,s,-1.6+i*0.55,5.8,0.92)); }
+  g.position.set(...pos); g.rotation.y = rot; g.scale.setScalar(0.95);
+  g.traverse(o=>{ if(o.isMesh) o.castShadow = true; });
+  scene.add(g); animals.push(g); return g;
+}
+/* elephant */
+function elephant(pos, rot){
+  const g = new THREE.Group(); const c = 0x8d8f92;
+  g.add(sph(2.6,c,0,4.4,0)); g.children[0].scale.set(1.25,1,1);
+  g.add(sph(1.5,c,2.9,4.9,0));
+  const trunk = cyl(0.28,0.5,3.4,c,3.6,3.1,0,8); trunk.rotation.z = 0.5; g.add(trunk);
+  [-1,1].forEach(z=>{ const e=box(0.18,1.6,1.9,c,2.7,5.2,z*1.2); e.rotation.y=z*0.25; g.add(e); });
+  [-1.5,1.5].forEach(x=>[-0.9,0.9].forEach(z=>g.add(cyl(0.38,0.42,3.4,c,x,1.9,z))));
+  g.position.set(...pos); g.rotation.y=rot; g.scale.setScalar(0.95);
+  g.traverse(o=>{ if(o.isMesh) o.castShadow = true; }); scene.add(g); animals.push(g); return g;
+}
+/* zebra */
+function zebra(pos, rot){
+  const g = new THREE.Group(); const w = 0xf2efe6, k = 0x252525;
+  g.add(box(2.9,1.5,1.2,w,0,4.2,0));
+  g.add(box(1.1,1.0,0.9,w,1.9,4.9,0));
+  g.add(cyl(0.1,0.1,1.2,k,1.9,3.9,0.3));
+  [-1.1,1.1].forEach(x=>[-0.5,0.5].forEach(z=>g.add(cyl(0.16,0.2,3.4,w,x,1.7,z))));
+  for(let i=0;i<5;i++){ g.add(box(0.3,1.3,1.24,k,-1.1+i*0.55,4.2,0)); }
+  g.position.set(...pos); g.rotation.y=rot; g.scale.setScalar(0.9);
+  g.traverse(o=>{ if(o.isMesh) o.castShadow = true; }); scene.add(g); animals.push(g); return g;
+}
+/* tiger */
+function tiger(pos, rot){
+  const g = new THREE.Group(); const o = 0xd97c2b, k = 0x2b1a0d;
+  g.add(box(2.4,1.2,1.0,o,0,2.6,0));
+  g.add(sph(0.75,o,1.5,3.1,0));
+  [-0.8,0.8].forEach(x=>[-0.35,0.35].forEach(z=>g.add(cyl(0.14,0.16,2.2,o,x,1.1,z))));
+  for(let i=0;i<4;i++) g.add(box(0.16,1.0,1.04,k,-0.7+i*0.45,2.6,0));
+  [-0.25,0.25].forEach(z=>g.add(box(0.9,0.4,0.1,k,1.5,3.35,z)));
+  g.position.set(...pos); g.rotation.y=rot; g.scale.setScalar(0.95);
+  g.traverse(o2=>{ if(o2.isMesh) o2.castShadow = true; }); scene.add(g); animals.push(g); return g;
+}
+/* panda */
+function panda(pos, rot){
+  const g = new THREE.Group(); const w = 0xf5f3ee, k = 0x1f2937;
+  g.add(sph(1.5,w,0,2.9,0)); g.children[0].scale.set(1.15,1,1);
+  g.add(sph(0.95,w,0.4,4.3,0));
+  [-0.4,0.4].forEach(z=>{ g.add(sph(0.34,k,0.55,4.6,z*1.0)); g.add(sph(0.16,w,0.75,4.6,z*1.0)); });
+  [-0.6,0.6].forEach(z=>g.add(sph(0.32,k,0.2,5.05,z)));
+  [-0.55,0.55].forEach(x=>[-0.5,0.5].forEach(z=>g.add(cyl(0.2,0.24,1.8,k,x,1.0,z))));
+  g.add(sph(0.3,k,-1.4,3.2,0));
+  g.position.set(...pos); g.rotation.y=rot; g.scale.setScalar(1.0);
+  g.traverse(o=>{ if(o.isMesh) o.castShadow = true; }); scene.add(g); animals.push(g); return g;
+}
+/* flamingo */
+function flamingo(pos){
+  const g = new THREE.Group(); const p = 0xf08fa8;
+  g.add(sph(0.7,p,0,2.5,0)); g.children[0].scale.set(1.5,1,1);
+  g.add(cyl(0.1,0.12,2.0,p,0.55,3.4,0,6).rotateZ(-0.25));
+  g.add(sph(0.28,p,0.85,4.3,0));
+  [-0.25,0.25].forEach(z=>g.add(cyl(0.05,0.05,2.5,0xd977a0,0,1.25,z,5)));
+  g.position.set(...pos); g.scale.setScalar(0.9);
+  g.traverse(o=>{ if(o.isMesh) o.castShadow = true; }); scene.add(g); animals.push(g); return g;
+}
+
+/* place animals */
+giraffe([34,0,18], -0.6); giraffe([41,0,6], 0.9); giraffe([30,0,7], 2.2);
+elephant([43,0,20], -1.1); elephant([26,0,17], 1.9);
+zebra([47,0,10], -0.4); zebra([33,0,-2], 2.6);
+tiger([-44,0,-13], 0.4); tiger([-37,0,-3], 2.2); tiger([-48,0,-4], -1.4);
+panda([-14,0,-45], 0.3); panda([-8,0,-41], 2.0);
+flamingo([6,0,-26]); flamingo([9,0,-22]); flamingo([3,0,-23]);
+
+/* ---------- safari train ---------- */
+const trainCurve = mainLoop;
+const train = new THREE.Group();
+const carColors = [0x2f6b4f, 0xe0a94a, 0x2f6b4f];
+for(let i=0;i<3;i++){
+  const car = new THREE.Group();
+  const body = box(5.2,2.2,3.0, carColors[i], 0, 1.5, 0); car.add(body);
+  const roof = box(5.4,0.3,3.2, 0xf2efe6, 0, 2.8, 0); car.add(roof);
+  [-1.6,1.6].forEach(z=>[-1.9,1.9].forEach(x=>car.add(cyl(0.5,0.5,0.35,0x1f2937,x,0.6,z,10).rotateX(Math.PI/2))));
+  car.position.z = -i*4.4;
+  car.traverse(o=>{ if(o.isMesh) o.castShadow = true; });
+  train.add(car);
+}
+scene.add(train);
+const trainOffset = { t: 0 };
+
+/* ---------- birds ---------- */
+const birds = [];
+for(let i=0;i<14;i++){
+  const b = new THREE.Group();
+  const body = box(0.9,0.12,0.28,0xffffff); b.add(body);
+  const wL = box(0.9,0.05,0.35,0xf1f5f9,-0.45,0,-0.2); const wR = wL.clone(); wR.position.z = 0.2;
+  b.add(wL,wR); b.userData.w = [wL,wR];
+  b.position.set((Math.random()-0.5)*120, 22+Math.random()*18, (Math.random()-0.5)*120);
+  scene.add(b); birds.push(b);
+}
+
+/* ============================== UI ============================== */
+const zoneListEl = document.getElementById('zoneList');
+ZONES.forEach(z=>{
+  const b = document.createElement('button');
+  b.className = 'zoneBtn'; b.dataset.zone = z.id;
+  b.innerHTML = `<i style="background:${z.color}"></i>${z.name}`;
+  b.addEventListener('click', ()=>openZone(z.id, true));
+  zoneListEl.appendChild(b);
+});
+
+const info = document.getElementById('info');
+const infoTitle = document.getElementById('infoTitle');
+const infoSub = document.getElementById('infoSub');
+const infoDesc = document.getElementById('infoDesc');
+const infoTips = document.getElementById('infoTips');
+const infoPrice = document.getElementById('infoPrice');
+const infoKicker = document.getElementById('infoKicker');
+let activeZone = null;
+
+function openZone(id, focus){
+  const z = ZONES.find(x=>x.id===id);
+  if(!z) return;
+  activeZone = id;
+  infoKicker.textContent = z.en;
+  infoTitle.textContent = z.name;
+  infoSub.textContent = z.sub;
+  infoDesc.textContent = z.desc;
+  infoTips.innerHTML = z.tips.map(t=>`<li>${t}</li>`).join('');
+  infoPrice.innerHTML = z.price.map(p=>`<span>${p}</span>`).join('');
+  info.classList.add('open');
+  document.querySelectorAll('.zoneBtn').forEach(b=>b.classList.toggle('on', b.dataset.zone===id));
+  if(focus) flyTo(z.pos, z.r);
+}
+document.getElementById('infoClose').addEventListener('click', ()=>{
+  info.classList.remove('open'); activeZone = null;
+  document.querySelectorAll('.zoneBtn').forEach(b=>b.classList.remove('on'));
+});
+
+/* camera flight */
+let flight = null;
+function flyTo(pos, r){
+  const target = new THREE.Vector3(pos[0], 2, pos[2]);
+  const dist = Math.max(38, r*3.4);
+  const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+  const camEnd = target.clone().add(dir.multiplyScalar(dist)).setY(dist*0.78);
+  flight = { t:0, fromT:controls.target.clone(), toT:target, fromP:camera.position.clone(), toP:camEnd };
+}
+
+/* dock views */
+document.querySelectorAll('#dock button[data-view]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#dock button[data-view]').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    const v = btn.dataset.view;
+    if(v==='overview'){ info.classList.remove('open'); flyTo([0,0,4], 30); controls.target.set(0,0,4); flight=null; camera.position.set(0,78,118); }
+    else openZone(v, true);
+  });
+});
+
+/* intro */
+const intro = document.getElementById('intro');
+document.getElementById('enterBtn').addEventListener('click', ()=>{
+  intro.classList.add('hide');
+  setTimeout(()=>intro.remove(), 700);
+});
+
+/* night */
+const nightBtn = document.getElementById('nightBtn');
+nightBtn.addEventListener('click', ()=>{
+  document.body.classList.toggle('night');
+  const night = document.body.classList.contains('night');
+  nightBtn.textContent = night ? '☀️ 日景' : '🌙 夜景';
+  scene.fog.color.set(night ? 0x16263a : 0xdfe9dd);
+  hemi.intensity = night ? 0.35 : 1.05;
+  sun.intensity = night ? 0.35 : 2.1;
+  sun.color.set(night ? 0x93b7ff : 0xfff2d5);
+  ground.material.color.set(night ? 0x40604a : 0x8fbf6a);
+  outer.material.color.set(night ? 0x2f4a3a : 0x6f9b57);
+});
+
+/* rotate */
+const rotateBtn = document.getElementById('rotateBtn');
+rotateBtn.addEventListener('click', ()=>{
+  controls.autoRotate = !controls.autoRotate;
+  rotateBtn.style.opacity = controls.autoRotate ? 1 : .55;
+});
+
+/* one-day tour */
+let touring = false, tourIdx = 0, tourTimer = null;
+const TOUR = ['entrance','panda','herb','show','beast','ocean'];
+document.getElementById('tourBtn').addEventListener('click', ()=>{
+  touring = !touring;
+  const btn = document.getElementById('tourBtn');
+  btn.textContent = touring ? '■ 停止路線' : '▶ 一日路線';
+  if(touring){ tourIdx = 0; stepTour(); tourTimer = setInterval(stepTour, 9000); }
+  else { clearInterval(tourTimer); tourTimer = null; }
+});
+function stepTour(){
+  openZone(TOUR[tourIdx % TOUR.length], true);
+  tourIdx++;
+}
+
+/* pointer picking */
+const ray = new THREE.Raycaster();
+const ptr = new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown', e=>{
+  ptr.x = (e.clientX/innerWidth)*2 - 1;
+  ptr.y = -(e.clientY/innerHeight)*2 + 1;
+  ray.setFromCamera(ptr, camera);
+  const hit = ray.intersectObjects(pickables, false)[0];
+  if(hit) openZone(hit.object.userData.zone, true);
+});
+
+/* resize */
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  labelRenderer.setSize(innerWidth, innerHeight);
+});
+
+/* ============================== LOOP ============================== */
+const clock = new THREE.Clock();
+let t = 0;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta(); t += dt;
+
+  // train along curve
+  trainOffset.t = (trainOffset.t + dt*0.012) % 1;
+  const p = trainCurve.getPointAt(trainOffset.t);
+  const tan = trainCurve.getTangentAt(trainOffset.t);
+  train.position.copy(p).setY(1.0);
+  train.lookAt(p.clone().add(tan));
+
+  // birds
+  birds.forEach((b,i)=>{
+    const a = t*0.18 + i*0.9;
+    const R = 60 + (i%4)*10;
+    b.position.x = Math.cos(a)*R;
+    b.position.z = Math.sin(a)*R;
+    b.position.y = 26 + Math.sin(t*0.7+i)*2.5;
+    b.rotation.y = -a + Math.PI/2;
+    b.userData.w[0].rotation.z = Math.sin(t*6+i)*0.5;
+    b.userData.w[1].rotation.z = -Math.sin(t*6+i)*0.5;
+  });
+
+  // gentle animal bob
+  animals.forEach((g,i)=>{ g.position.y = Math.sin(t*1.2+i)*0.04; });
+
+  // camera flight
+  if(flight){
+    flight.t = Math.min(1, flight.t + dt*1.6);
+    const e = 1 - Math.pow(1-flight.t, 3);
+    controls.target.lerpVectors(flight.fromT, flight.toT, e);
+    camera.position.lerpVectors(flight.fromP, flight.toP, e);
+    if(flight.t>=1) flight = null;
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+}
+
+/* boot */
+try {
+  animate();
+  setTimeout(()=>document.getElementById('loading').classList.add('gone'), 350);
+  setTimeout(()=>{ const l=document.getElementById('loading'); if(l) l.remove(); }, 900);
+} catch(err){
+  document.getElementById('loading').textContent = '3D 載入失敗：' + err.message;
+}
+</script>
+</body>
+</html>
